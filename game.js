@@ -15,7 +15,6 @@ const W = canvas.width;
 const H = canvas.height;
 
 let keys = {};
-let jumpPressed = false;
 let running = false;
 let won = false;
 let falls = 0;
@@ -24,9 +23,26 @@ let cameraY = 0;
 let frame = 0;
 let checkpoint = 0;
 
+let jumpBuffer = 0;
+let coyoteTimer = 0;
+
+const PHYSICS = {
+  acceleration: 0.75,
+  airAcceleration: 0.42,
+  maxSpeed: 5.2,
+  friction: 0.78,
+  airFriction: 0.97,
+  jumpPower: 14.2,
+  gravity: 0.58,
+  fallGravity: 0.82,
+  maxFallSpeed: 15,
+  coyoteFrames: 9,
+  jumpBufferFrames: 9
+};
+
 const player = {
   x: 90,
-  y: 440,
+  y: 452,
   w: 28,
   h: 38,
   vx: 0,
@@ -35,8 +51,7 @@ const player = {
   facing: 1
 };
 
-// Platforms form a tall parkour tower.
-// Smaller gaps make it possible to jump from one to the next.
+// Vertical parkour platforms
 const platforms = [
   { x: 0, y: 490, w: 300, h: 20 },
   { x: 350, y: 410, w: 125, h: 16 },
@@ -57,9 +72,18 @@ const platforms = [
 ];
 
 const movingPlatforms = [
-  { x: 560, y: 325, w: 110, h: 15, start: 560, end: 760, speed: 1.5, dir: 1 },
-  { x: 100, y: -145, w: 105, h: 15, start: 100, end: 310, speed: 1.8, dir: 1 },
-  { x: 650, y: -405, w: 105, h: 15, start: 650, end: 810, speed: 1.4, dir: 1 }
+  {
+    x: 560, y: 325, w: 110, h: 15,
+    start: 560, end: 760, speed: 1.5, dir: 1
+  },
+  {
+    x: 100, y: -145, w: 105, h: 15,
+    start: 100, end: 310, speed: 1.8, dir: 1
+  },
+  {
+    x: 650, y: -405, w: 105, h: 15,
+    start: 650, end: 810, speed: 1.4, dir: 1
+  }
 ];
 
 const checkpoints = [
@@ -67,28 +91,47 @@ const checkpoints = [
   { x: 250, y: -350, name: "CAMP 2", active: false }
 ];
 
-const goal = { x: 465, y: -875, w: 55, h: 65 };
+const goal = {
+  x: 465,
+  y: -875,
+  w: 55,
+  h: 65
+};
 
 function updateHUD() {
   checkpointText.textContent =
-    checkpoint === 0 ? "BASE CAMP" : checkpoints[checkpoint - 1].name;
+    checkpoint === 0
+      ? "BASE CAMP"
+      : checkpoints[checkpoint - 1].name;
+
   fallsText.textContent = falls;
   resolveText.textContent = resolve;
 }
 
 function getSpawn() {
-  if (checkpoint === 0) return { x: 90, y: 452 };
-  if (checkpoint === 1) return { x: 520, y: 17 };
+  if (checkpoint === 0) {
+    return { x: 90, y: 452 };
+  }
+
+  if (checkpoint === 1) {
+    return { x: 520, y: 17 };
+  }
+
   return { x: 270, y: -388 };
 }
 
 function resetPlayer() {
   const spawn = getSpawn();
+
   player.x = spawn.x;
   player.y = spawn.y;
   player.vx = 0;
   player.vy = 0;
   player.grounded = false;
+
+  jumpBuffer = 0;
+  coyoteTimer = 0;
+
   cameraY = Math.min(0, player.y - 330);
 }
 
@@ -96,6 +139,11 @@ function startGame() {
   falls = 0;
   resolve = 0;
   checkpoint = 0;
+  frame = 0;
+
+  jumpBuffer = 0;
+  coyoteTimer = 0;
+
   checkpoints.forEach(c => c.active = false);
 
   movingPlatforms.forEach(p => {
@@ -103,28 +151,36 @@ function startGame() {
     p.dir = 1;
   });
 
+  keys = {};
+
   resetPlayer();
+
   won = false;
   running = true;
-  frame = 0;
 
   startScreen.classList.add("hidden");
   winScreen.classList.add("hidden");
+
   updateHUD();
 }
 
-startButton.addEventListener("click", startGame);
-restartButton.addEventListener("click", startGame);
+// KEYBOARD CONTROLS
 
 document.addEventListener("keydown", e => {
   const key = e.key.toLowerCase();
 
-  if ([" ", "arrowup", "arrowleft", "arrowright"].includes(key)) {
+  if (
+    [" ", "arrowup", "arrowleft", "arrowright"].includes(key)
+  ) {
     e.preventDefault();
   }
 
-  if (!keys[key] && [" ", "w", "arrowup"].includes(key)) {
-    jumpPressed = true;
+  // Jump buffer
+  if (
+    !keys[key] &&
+    [" ", "w", "arrowup"].includes(key)
+  ) {
+    jumpBuffer = PHYSICS.jumpBufferFrames;
   }
 
   keys[key] = true;
@@ -135,8 +191,23 @@ document.addEventListener("keydown", e => {
 });
 
 document.addEventListener("keyup", e => {
-  keys[e.key.toLowerCase()] = false;
+  const key = e.key.toLowerCase();
+
+  keys[key] = false;
+
+  // Shorter jump when Space is released early
+  if (
+    [" ", "w", "arrowup"].includes(key) &&
+    player.vy < 0
+  ) {
+    player.vy *= 0.48;
+  }
 });
+
+startButton.addEventListener("click", startGame);
+restartButton.addEventListener("click", startGame);
+
+// MAIN PHYSICS
 
 function update() {
   if (!running || won) return;
@@ -146,46 +217,111 @@ function update() {
   const left = keys["a"] || keys["arrowleft"];
   const right = keys["d"] || keys["arrowright"];
 
+  // Acceleration and air control
+  const acceleration = player.grounded
+    ? PHYSICS.acceleration
+    : PHYSICS.airAcceleration;
+
   if (left) {
-    player.vx = -4.5;
+    player.vx -= acceleration;
     player.facing = -1;
-  } else if (right) {
-    player.vx = 4.5;
-    player.facing = 1;
-  } else {
-    player.vx *= 0.78;
   }
 
-  if (jumpPressed && player.grounded) {
-    player.vy = -(13.5 + Math.min(resolve * 0.12, 3));
-    player.grounded = false;
+  if (right) {
+    player.vx += acceleration;
+    player.facing = 1;
   }
-  jumpPressed = false;
+
+  if (!left && !right) {
+    player.vx *= player.grounded
+      ? PHYSICS.friction
+      : PHYSICS.airFriction;
+  }
+
+  player.vx = Math.max(
+    -PHYSICS.maxSpeed,
+    Math.min(PHYSICS.maxSpeed, player.vx)
+  );
+
+  // Coyote time
+  if (player.grounded) {
+    coyoteTimer = PHYSICS.coyoteFrames;
+  } else {
+    coyoteTimer = Math.max(0, coyoteTimer - 1);
+  }
+
+  // Jump buffering
+  if (jumpBuffer > 0) {
+    jumpBuffer--;
+  }
+
+  // Jump
+  if (jumpBuffer > 0 && coyoteTimer > 0) {
+    player.vy = -(
+      PHYSICS.jumpPower +
+      Math.min(resolve * 0.12, 3)
+    );
+
+    player.grounded = false;
+    coyoteTimer = 0;
+    jumpBuffer = 0;
+  }
+
+  // Gravity
+  const gravity = player.vy > 0
+    ? PHYSICS.fallGravity
+    : PHYSICS.gravity;
+
+  player.vy = Math.min(
+    player.vy + gravity,
+    PHYSICS.maxFallSpeed
+  );
+
+  // Save previous position for collision detection
+  const previousY = player.y;
 
   player.x += player.vx;
-  player.vy += 0.55;
   player.y += player.vy;
 
-  player.x = Math.max(0, Math.min(W - player.w, player.x));
+  player.x = Math.max(
+    0,
+    Math.min(W - player.w, player.x)
+  );
 
+  // Moving platforms
   movingPlatforms.forEach(p => {
     p.x += p.speed * p.dir;
-    if (p.x > p.end || p.x < p.start) p.dir *= -1;
+
+    if (p.x > p.end || p.x < p.start) {
+      p.dir *= -1;
+    }
   });
 
+  // Landing collision
   player.grounded = false;
 
-  const allPlatforms = [...platforms, ...movingPlatforms];
+  const allPlatforms = [
+    ...platforms,
+    ...movingPlatforms
+  ];
 
   for (const p of allPlatforms) {
     const overlapsX =
       player.x + player.w > p.x &&
       player.x < p.x + p.w;
 
-    const wasAbove = player.y + player.h - player.vy <= p.y;
-    const isCrossing = player.y + player.h >= p.y;
+    const wasAbove =
+      previousY + player.h <= p.y;
 
-    if (overlapsX && wasAbove && isCrossing && player.vy >= 0) {
+    const isCrossing =
+      player.y + player.h >= p.y;
+
+    if (
+      overlapsX &&
+      wasAbove &&
+      isCrossing &&
+      player.vy >= 0
+    ) {
       player.y = p.y - player.h;
       player.vy = 0;
       player.grounded = true;
@@ -196,7 +332,7 @@ function update() {
     }
   }
 
-  // Checkpoint flags
+  // Checkpoints
   checkpoints.forEach((c, i) => {
     if (
       !c.active &&
@@ -222,21 +358,26 @@ function update() {
     winScreen.classList.remove("hidden");
   }
 
-  // Falling below the screen
+  // Fall and respawn
   if (player.y - cameraY > H + 100) {
     falls++;
     resolve++;
+
     resetPlayer();
     updateHUD();
   }
 
-  // Camera moves upward with the player
+  // Smooth camera movement
   const targetCameraY = Math.min(0, player.y - 300);
+
   cameraY += (targetCameraY - cameraY) * 0.12;
 }
 
+// BACKGROUND
+
 function drawSky() {
   const sky = ctx.createLinearGradient(0, 0, 0, H);
+
   sky.addColorStop(0, "#80b9d1");
   sky.addColorStop(0.55, "#c3d9d1");
   sky.addColorStop(1, "#f5d6ad");
@@ -250,12 +391,16 @@ function drawSky() {
   ctx.arc(790, 90, 42, 0, Math.PI * 2);
   ctx.fill();
 
-  // Floating clouds
+  // Clouds
   for (let i = 0; i < 7; i++) {
-    const x = ((i * 175 + frame * 0.18) % (W + 150)) - 75;
+    const x = (
+      (i * 175 + frame * 0.18) % (W + 150)
+    ) - 75;
+
     const y = 75 + (i % 3) * 130;
 
     ctx.fillStyle = "#ffffff55";
+
     ctx.beginPath();
     ctx.arc(x, y, 23, 0, Math.PI * 2);
     ctx.arc(x + 25, y - 10, 28, 0, Math.PI * 2);
@@ -263,8 +408,9 @@ function drawSky() {
     ctx.fill();
   }
 
-  // Distant mountain shapes
+  // Mountains
   ctx.fillStyle = "#789c9e";
+
   ctx.beginPath();
   ctx.moveTo(0, H);
   ctx.lineTo(0, 390);
@@ -276,6 +422,8 @@ function drawSky() {
   ctx.lineTo(960, H);
   ctx.fill();
 }
+
+// PLATFORMS
 
 function drawPlatform(p, moving = false) {
   const x = p.x;
@@ -290,16 +438,20 @@ function drawPlatform(p, moving = false) {
   ctx.fillRect(x, y, p.w, 5);
 
   ctx.fillStyle = "#263f43";
+
   for (let i = 15; i < p.w - 10; i += 30) {
     ctx.fillRect(x + i, y + 9, 5, 4);
   }
 }
+
+// PLAYER
 
 function drawPlayer() {
   const x = player.x;
   const y = player.y - cameraY;
 
   ctx.save();
+
   ctx.translate(x + player.w / 2, y);
   ctx.scale(player.facing, 1);
 
@@ -313,21 +465,25 @@ function drawPlayer() {
 
   // Head
   ctx.fillStyle = "#f3c9a1";
+
   ctx.beginPath();
   ctx.arc(0, 8, 9, 0, Math.PI * 2);
   ctx.fill();
 
   // Helmet
   ctx.fillStyle = "#f2a65a";
+
   ctx.beginPath();
   ctx.arc(0, 5, 10, Math.PI, Math.PI * 2);
   ctx.fill();
+
   ctx.fillRect(-10, 4, 20, 3);
 
   // Legs
   ctx.strokeStyle = "#243c40";
   ctx.lineWidth = 5;
   ctx.lineCap = "round";
+
   ctx.beginPath();
   ctx.moveTo(-5, 31);
   ctx.lineTo(-8, 37);
@@ -335,11 +491,14 @@ function drawPlayer() {
   ctx.lineTo(8, 37);
   ctx.stroke();
 
+  // Eye
   ctx.fillStyle = "#243c40";
   ctx.fillRect(3, 8, 2, 2);
 
   ctx.restore();
 }
+
+// CHECKPOINTS
 
 function drawCheckpoints() {
   checkpoints.forEach(c => {
@@ -350,7 +509,10 @@ function drawCheckpoints() {
     ctx.fillStyle = "#405d60";
     ctx.fillRect(c.x, y - 40, 4, 40);
 
-    ctx.fillStyle = c.active ? "#f2a65a" : "#f1eee0";
+    ctx.fillStyle = c.active
+      ? "#f2a65a"
+      : "#f1eee0";
+
     ctx.beginPath();
     ctx.moveTo(c.x + 4, y - 40);
     ctx.lineTo(c.x + 35, y - 30);
@@ -364,6 +526,8 @@ function drawCheckpoints() {
   });
 }
 
+// SUMMIT
+
 function drawGoal() {
   const x = goal.x;
   const y = goal.y - cameraY;
@@ -372,6 +536,7 @@ function drawGoal() {
   ctx.fillRect(x, y, 5, 65);
 
   ctx.fillStyle = "#f2a65a";
+
   ctx.beginPath();
   ctx.moveTo(x + 5, y);
   ctx.lineTo(x + 42, y + 12);
@@ -384,47 +549,58 @@ function drawGoal() {
   ctx.fillText("SUMMIT", x - 13, y - 12);
 }
 
+// DRAW EVERYTHING
+
 function draw() {
   ctx.clearRect(0, 0, W, H);
 
   drawSky();
 
   platforms.forEach(p => drawPlatform(p));
-  movingPlatforms.forEach(p => drawPlatform(p, true));
+
+  movingPlatforms.forEach(p => {
+    drawPlatform(p, true);
+  });
 
   drawCheckpoints();
   drawGoal();
   drawPlayer();
 
-  // Height indicator
-  const height = Math.max(0, Math.floor((490 - player.y) / 10));
+  // Height display
+  const height = Math.max(
+    0,
+    Math.floor((490 - player.y) / 10)
+  );
+
   ctx.fillStyle = "#18343acc";
   ctx.fillRect(W - 155, 18, 137, 42);
 
   ctx.fillStyle = "#ffffff";
   ctx.font = "10px monospace";
   ctx.fillText("HEIGHT", W - 142, 34);
+
   ctx.font = "bold 16px monospace";
   ctx.fillText(height + " M", W - 142, 51);
 
   if (running && frame < 240) {
     ctx.fillStyle = "#18343acc";
     ctx.fillRect(18, 18, 215, 34);
+
     ctx.fillStyle = "#ffffff";
     ctx.font = "12px monospace";
     ctx.fillText("JUMP UP. KEEP GOING!", 30, 40);
   }
 }
 
+// GAME LOOP
+
 function gameLoop() {
   update();
   draw();
+
   requestAnimationFrame(gameLoop);
 }
 
 updateHUD();
 gameLoop();
-
-drawWorld();
-updateHUD();
 
