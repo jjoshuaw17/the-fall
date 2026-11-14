@@ -1,0 +1,137 @@
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    background: #101b2b;
+    color: white;
+    font-family: Arial, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+}
+
+.game-container {
+    width: 100%;
+    max-width: 1000px;
+    text-align: center;
+}
+
+header {
+    margin-bottom: 18px;
+}
+
+header h1 {
+    font-size: 42px;
+    letter-spacing: 8px;
+    color: #f4c875;
+}
+
+header p {
+    color: #aabbd0;
+    margin-top: 8px;
+}
+
+.hud {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding: 12px;
+    background: #20334a;
+    border-radius: 10px 10px 0 0;
+    font-size: 14px;
+}
+
+.canvas-container {
+    position: relative;
+    width: 100%;
+    background: #182a40;
+}
+
+canvas {
+    display: block;
+    width: 100%;
+    height: auto;
+    background: #8cb8d9;
+    border: 2px solid #415a75;
+}
+
+.screen {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 20px;
+    padding: 20px;
+    background: rgba(12, 24, 39, 0.88);
+}
+
+.screen h2 {
+    font-size: clamp(30px, 6vw, 52px);
+    color: #f4c875;
+    letter-spacing: 4px;
+}
+
+.screen p {
+    color: #d4e0ed;
+    line-height: 1.5;
+}
+
+button {
+    padding: 14px 28px;
+    background: #e5a94f;
+    color: #182334;
+    border: none;
+    border-radius: 7px;
+    font-size: 15px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: 0.2s;
+}
+
+button:hover {
+    background: #ffd17d;
+    transform: scale(1.04);
+}
+
+.hidden {
+    display: none;
+}
+
+.controls {
+    display: flex;
+    justify-content: center;
+    gap: 30px;
+    flex-wrap: wrap;
+    padding: 18px;
+    color: #b7c8d9;
+    font-size: 13px;
+}
+
+footer {
+    color: #72869d;
+    font-size: 12px;
+    padding: 10px;
+}
+
+@media (max-width: 600px) {
+    header h1 {
+        font-size: 30px;
+    }
+
+    .hud {
+        font-size: 11px;
+    }
+
+    .controls {
+        gap: 12px;
+    }
+}
