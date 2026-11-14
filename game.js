@@ -1,3 +1,4 @@
+
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
@@ -14,18 +15,18 @@ const W = canvas.width;
 const H = canvas.height;
 
 let keys = {};
+let jumpPressed = false;
 let running = false;
 let won = false;
 let falls = 0;
 let resolve = 0;
-let cameraX = 0;
 let cameraY = 0;
 let frame = 0;
 let checkpoint = 0;
 
 const player = {
-  x: 65,
-  y: 410,
+  x: 90,
+  y: 440,
   w: 28,
   h: 38,
   vx: 0,
@@ -34,34 +35,39 @@ const player = {
   facing: 1
 };
 
-// The platforms form a path up the mountain.
+// Platforms form a tall parkour tower.
+// Smaller gaps make it possible to jump from one to the next.
 const platforms = [
-  { x: 0, y: 475, w: 310, h: 22 },
-  { x: 250, y: 390, w: 130, h: 18 },
-  { x: 440, y: 320, w: 130, h: 18 },
-  { x: 625, y: 245, w: 125, h: 18 },
-  { x: 810, y: 320, w: 130, h: 18 },
-  { x: 1000, y: 245, w: 130, h: 18 },
-  { x: 1190, y: 170, w: 130, h: 18 },
-  { x: 1380, y: 245, w: 130, h: 18 },
-  { x: 1570, y: 165, w: 130, h: 18 },
-  { x: 1760, y: 95, w: 145, h: 18 },
-  { x: 1980, y: 165, w: 135, h: 18 },
-  { x: 2180, y: 85, w: 150, h: 18 },
-  { x: 2420, y: 10, w: 230, h: 22 }
+  { x: 0, y: 490, w: 300, h: 20 },
+  { x: 350, y: 410, w: 125, h: 16 },
+  { x: 145, y: 325, w: 120, h: 16 },
+  { x: 430, y: 240, w: 120, h: 16 },
+  { x: 700, y: 155, w: 125, h: 16 },
+  { x: 475, y: 65, w: 120, h: 16 },
+  { x: 190, y: -20, w: 125, h: 16 },
+  { x: 470, y: -105, w: 120, h: 16 },
+  { x: 740, y: -190, w: 125, h: 16 },
+  { x: 510, y: -275, w: 120, h: 16 },
+  { x: 220, y: -360, w: 125, h: 16 },
+  { x: 480, y: -445, w: 120, h: 16 },
+  { x: 740, y: -530, w: 130, h: 16 },
+  { x: 470, y: -615, w: 125, h: 16 },
+  { x: 180, y: -700, w: 130, h: 16 },
+  { x: 430, y: -785, w: 140, h: 20 }
 ];
 
 const movingPlatforms = [
-  { x: 900, y: 405, w: 110, h: 16, start: 900, end: 1080, speed: 1.3, dir: 1 },
-  { x: 1650, y: 300, w: 110, h: 16, start: 1650, end: 1820, speed: 1.5, dir: 1 }
+  { x: 560, y: 325, w: 110, h: 15, start: 560, end: 760, speed: 1.5, dir: 1 },
+  { x: 100, y: -145, w: 105, h: 15, start: 100, end: 310, speed: 1.8, dir: 1 },
+  { x: 650, y: -405, w: 105, h: 15, start: 650, end: 810, speed: 1.4, dir: 1 }
 ];
 
 const checkpoints = [
-  { x: 1050, y: 215, name: "CAMP 1", active: false },
-  { x: 1810, y: 65, name: "CAMP 2", active: false }
+  { x: 500, y: 55, name: "CAMP 1", active: false },
+  { x: 250, y: -350, name: "CAMP 2", active: false }
 ];
 
-const goal = { x: 2510, y: -45, w: 50, h: 55 };
+const goal = { x: 465, y: -875, w: 55, h: 65 };
 
 function updateHUD() {
   checkpointText.textContent =
@@ -70,18 +76,20 @@ function updateHUD() {
   resolveText.textContent = resolve;
 }
 
-function resetPlayer() {
-  const base = checkpoint === 0
-    ? { x: 65, y: 410 }
-    : checkpoint === 1
-      ? { x: 1055, y: 180 }
-      : { x: 1815, y: 25 };
+function getSpawn() {
+  if (checkpoint === 0) return { x: 90, y: 452 };
+  if (checkpoint === 1) return { x: 520, y: 17 };
+  return { x: 270, y: -388 };
+}
 
-  player.x = base.x;
-  player.y = base.y;
+function resetPlayer() {
+  const spawn = getSpawn();
+  player.x = spawn.x;
+  player.y = spawn.y;
   player.vx = 0;
   player.vy = 0;
   player.grounded = false;
+  cameraY = Math.min(0, player.y - 330);
 }
 
 function startGame() {
@@ -89,14 +97,17 @@ function startGame() {
   resolve = 0;
   checkpoint = 0;
   checkpoints.forEach(c => c.active = false);
-  movingPlatforms[0].x = movingPlatforms[0].start;
-  movingPlatforms[1].x = movingPlatforms[1].start;
-  movingPlatforms.forEach(p => p.dir = 1);
+
+  movingPlatforms.forEach(p => {
+    p.x = p.start;
+    p.dir = 1;
+  });
+
   resetPlayer();
-  cameraX = 0;
-  cameraY = 0;
   won = false;
   running = true;
+  frame = 0;
+
   startScreen.classList.add("hidden");
   winScreen.classList.add("hidden");
   updateHUD();
@@ -105,28 +116,27 @@ function startGame() {
 startButton.addEventListener("click", startGame);
 restartButton.addEventListener("click", startGame);
 
-document.addEventListener("keydown", (e) => {
-  keys[e.key.toLowerCase()] = true;
+document.addEventListener("keydown", e => {
+  const key = e.key.toLowerCase();
 
-  if ([" ", "arrowup", "arrowleft", "arrowright"].includes(e.key.toLowerCase())) {
+  if ([" ", "arrowup", "arrowleft", "arrowright"].includes(key)) {
     e.preventDefault();
   }
 
-  if (e.key.toLowerCase() === "r" && running) {
+  if (!keys[key] && [" ", "w", "arrowup"].includes(key)) {
+    jumpPressed = true;
+  }
+
+  keys[key] = true;
+
+  if (key === "r" && running) {
     resetPlayer();
   }
 });
 
-document.addEventListener("keyup", (e) => {
+document.addEventListener("keyup", e => {
   keys[e.key.toLowerCase()] = false;
 });
-
-function jump() {
-  if (player.grounded) {
-    player.vy = -(12.5 + Math.min(resolve * 0.12, 3));
-    player.grounded = false;
-  }
-}
 
 function update() {
   if (!running || won) return;
@@ -137,24 +147,26 @@ function update() {
   const right = keys["d"] || keys["arrowright"];
 
   if (left) {
-    player.vx = -4.2;
+    player.vx = -4.5;
     player.facing = -1;
   } else if (right) {
-    player.vx = 4.2;
+    player.vx = 4.5;
     player.facing = 1;
   } else {
     player.vx *= 0.78;
   }
 
-  if ((keys[" "] || keys["w"] || keys["arrowup"]) && player.grounded) {
-    jump();
+  if (jumpPressed && player.grounded) {
+    player.vy = -(13.5 + Math.min(resolve * 0.12, 3));
+    player.grounded = false;
   }
+  jumpPressed = false;
 
   player.x += player.vx;
   player.vy += 0.55;
   player.y += player.vy;
 
-  player.x = Math.max(0, Math.min(2700, player.x));
+  player.x = Math.max(0, Math.min(W - player.w, player.x));
 
   movingPlatforms.forEach(p => {
     p.x += p.speed * p.dir;
@@ -184,101 +196,107 @@ function update() {
     }
   }
 
-  // Activate camps as the climber reaches them.
+  // Checkpoint flags
   checkpoints.forEach((c, i) => {
-    if (!c.active && player.x > c.x - 35 && player.x < c.x + 100 &&
-        Math.abs(player.y + player.h - c.y) < 115) {
+    if (
+      !c.active &&
+      player.x + player.w > c.x &&
+      player.x < c.x + 65 &&
+      Math.abs(player.y + player.h - c.y) < 45
+    ) {
       c.active = true;
       checkpoint = i + 1;
       updateHUD();
     }
   });
 
-  // Reach the summit.
+  // Summit
   if (
     player.x + player.w > goal.x &&
     player.x < goal.x + goal.w &&
     player.y + player.h > goal.y &&
-    player.y < goal.y + goal.h + 30
+    player.y < goal.y + goal.h
   ) {
     won = true;
     running = false;
     winScreen.classList.remove("hidden");
   }
 
-  // Falling off the mountain sends the climber to the latest camp.
-  if (player.y > 750) {
+  // Falling below the screen
+  if (player.y - cameraY > H + 100) {
     falls++;
     resolve++;
     resetPlayer();
     updateHUD();
   }
 
-  // Smooth camera follows the climber.
-  const targetX = player.x - W * 0.38;
-  const targetY = player.y - H * 0.58;
-  cameraX += (targetX - cameraX) * 0.08;
-  cameraY += (targetY - cameraY) * 0.08;
-  cameraX = Math.max(0, Math.min(1800, cameraX));
-  cameraY = Math.min(0, cameraY);
+  // Camera moves upward with the player
+  const targetCameraY = Math.min(0, player.y - 300);
+  cameraY += (targetCameraY - cameraY) * 0.12;
 }
 
 function drawSky() {
   const sky = ctx.createLinearGradient(0, 0, 0, H);
-  sky.addColorStop(0, "#8bc6d0");
-  sky.addColorStop(0.65, "#d7d9c9");
-  sky.addColorStop(1, "#f2c99b");
+  sky.addColorStop(0, "#80b9d1");
+  sky.addColorStop(0.55, "#c3d9d1");
+  sky.addColorStop(1, "#f5d6ad");
+
   ctx.fillStyle = sky;
   ctx.fillRect(0, 0, W, H);
 
   // Sun
-  ctx.fillStyle = "#ffe2a5";
+  ctx.fillStyle = "#ffe8b0";
   ctx.beginPath();
-  ctx.arc(760, 105, 43, 0, Math.PI * 2);
+  ctx.arc(790, 90, 42, 0, Math.PI * 2);
   ctx.fill();
 
-  // Distant mountain silhouettes
-  drawMountainLayer("#9bb7b5", 0.12, 330, 100);
-  drawMountainLayer("#718f91", 0.22, 390, 130);
-  drawMountainLayer("#506e72", 0.34, 450, 155);
-}
+  // Floating clouds
+  for (let i = 0; i < 7; i++) {
+    const x = ((i * 175 + frame * 0.18) % (W + 150)) - 75;
+    const y = 75 + (i % 3) * 130;
 
-function drawMountainLayer(color, speed, base, height) {
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.moveTo(0, H);
-
-  for (let x = -100; x <= W + 100; x += 100) {
-    const worldX = x + cameraX * speed;
-    const peak = base - Math.abs(Math.sin(worldX * 0.004)) * height;
-    ctx.lineTo(x, peak);
+    ctx.fillStyle = "#ffffff55";
+    ctx.beginPath();
+    ctx.arc(x, y, 23, 0, Math.PI * 2);
+    ctx.arc(x + 25, y - 10, 28, 0, Math.PI * 2);
+    ctx.arc(x + 52, y, 22, 0, Math.PI * 2);
+    ctx.fill();
   }
 
-  ctx.lineTo(W, H);
-  ctx.closePath();
+  // Distant mountain shapes
+  ctx.fillStyle = "#789c9e";
+  ctx.beginPath();
+  ctx.moveTo(0, H);
+  ctx.lineTo(0, 390);
+  ctx.lineTo(180, 190);
+  ctx.lineTo(350, 390);
+  ctx.lineTo(560, 150);
+  ctx.lineTo(780, 400);
+  ctx.lineTo(960, 210);
+  ctx.lineTo(960, H);
   ctx.fill();
 }
 
 function drawPlatform(p, moving = false) {
-  const x = p.x - cameraX;
+  const x = p.x;
   const y = p.y - cameraY;
 
-  if (x + p.w < -20 || x > W + 20 || y > H + 30 || y < -30) return;
+  if (y < -40 || y > H + 40) return;
 
-  ctx.fillStyle = moving ? "#d99a60" : "#405d60";
+  ctx.fillStyle = moving ? "#d98e53" : "#405e60";
   ctx.fillRect(x, y, p.w, p.h);
 
-  ctx.fillStyle = moving ? "#ffd08d" : "#88a69a";
+  ctx.fillStyle = moving ? "#ffcf91" : "#9cb9a5";
   ctx.fillRect(x, y, p.w, 5);
 
-  ctx.fillStyle = "#243c40";
-  for (let i = 12; i < p.w - 8; i += 28) {
+  ctx.fillStyle = "#263f43";
+  for (let i = 15; i < p.w - 10; i += 30) {
     ctx.fillRect(x + i, y + 9, 5, 4);
   }
 }
 
 function drawPlayer() {
-  const x = player.x - cameraX;
+  const x = player.x;
   const y = player.y - cameraY;
 
   ctx.save();
@@ -287,7 +305,7 @@ function drawPlayer() {
 
   // Backpack
   ctx.fillStyle = "#d97848";
-  ctx.fillRect(-17, 10, 9, 19);
+  ctx.fillRect(-17, 11, 9, 19);
 
   // Body
   ctx.fillStyle = "#f2a65a";
@@ -317,68 +335,84 @@ function drawPlayer() {
   ctx.lineTo(8, 37);
   ctx.stroke();
 
-  // Face
   ctx.fillStyle = "#243c40";
   ctx.fillRect(3, 8, 2, 2);
 
   ctx.restore();
 }
 
-function drawCheckpoint(c) {
-  const x = c.x - cameraX;
-  const y = c.y - cameraY;
+function drawCheckpoints() {
+  checkpoints.forEach(c => {
+    const y = c.y - cameraY;
 
-  if (x < -30 || x > W + 30) return;
+    if (y < -60 || y > H + 60) return;
 
-  ctx.fillStyle = "#405d60";
-  ctx.fillRect(x, y - 40, 4, 40);
+    ctx.fillStyle = "#405d60";
+    ctx.fillRect(c.x, y - 40, 4, 40);
 
-  ctx.fillStyle = c.active ? "#f2a65a" : "#e9eee2";
-  ctx.beginPath();
-  ctx.moveTo(x + 4, y - 40);
-  ctx.lineTo(x + 32, y - 31);
-  ctx.lineTo(x + 4, y - 22);
-  ctx.closePath();
-  ctx.fill();
+    ctx.fillStyle = c.active ? "#f2a65a" : "#f1eee0";
+    ctx.beginPath();
+    ctx.moveTo(c.x + 4, y - 40);
+    ctx.lineTo(c.x + 35, y - 30);
+    ctx.lineTo(c.x + 4, y - 20);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = "#263f43";
+    ctx.font = "11px monospace";
+    ctx.fillText(c.name, c.x - 8, y - 48);
+  });
 }
 
 function drawGoal() {
-  const x = goal.x - cameraX;
+  const x = goal.x;
   const y = goal.y - cameraY;
 
   ctx.fillStyle = "#405d60";
-  ctx.fillRect(x, y, 5, 55);
+  ctx.fillRect(x, y, 5, 65);
 
   ctx.fillStyle = "#f2a65a";
   ctx.beginPath();
   ctx.moveTo(x + 5, y);
-  ctx.lineTo(x + 38, y + 10);
-  ctx.lineTo(x + 5, y + 20);
+  ctx.lineTo(x + 42, y + 12);
+  ctx.lineTo(x + 5, y + 24);
   ctx.closePath();
   ctx.fill();
 
   ctx.fillStyle = "#fff1ce";
-  ctx.font = "bold 13px monospace";
-  ctx.fillText("SUMMIT", x - 12, y - 12);
+  ctx.font = "bold 14px monospace";
+  ctx.fillText("SUMMIT", x - 13, y - 12);
 }
 
 function draw() {
   ctx.clearRect(0, 0, W, H);
+
   drawSky();
 
   platforms.forEach(p => drawPlatform(p));
   movingPlatforms.forEach(p => drawPlatform(p, true));
-  checkpoints.forEach(drawCheckpoint);
+
+  drawCheckpoints();
   drawGoal();
   drawPlayer();
 
-  // Small climbing hint
+  // Height indicator
+  const height = Math.max(0, Math.floor((490 - player.y) / 10));
+  ctx.fillStyle = "#18343acc";
+  ctx.fillRect(W - 155, 18, 137, 42);
+
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "10px monospace";
+  ctx.fillText("HEIGHT", W - 142, 34);
+  ctx.font = "bold 16px monospace";
+  ctx.fillText(height + " M", W - 142, 51);
+
   if (running && frame < 240) {
     ctx.fillStyle = "#18343acc";
     ctx.fillRect(18, 18, 215, 34);
     ctx.fillStyle = "#ffffff";
     ctx.font = "12px monospace";
-    ctx.fillText("KEEP CLIMBING  ↑", 30, 40);
+    ctx.fillText("JUMP UP. KEEP GOING!", 30, 40);
   }
 }
 
@@ -390,7 +424,7 @@ function gameLoop() {
 
 updateHUD();
 gameLoop();
-// Initial screen
+
 drawBackground();
 drawWorld();
 updateHUD();
