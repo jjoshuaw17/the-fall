@@ -1,51 +1,71 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>THE FALL</title>
-    <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>THE FALL — Bounce Back</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="game.js" defer></script>
 </head>
 <body>
+  <main class="game-shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">A GAME ABOUT GETTING BACK UP</p>
+        <h1>THE FALL<span>.</span></h1>
+      </div>
+      <div class="tag">BOUNCE BACK</div>
+    </header>
 
-    <div class="game-container">
-        <header>
-            <h1>THE FALL</h1>
-            <p>Every fall is another chance to rise.</p>
-        </header>
+    <section class="hud">
+      <div class="stat">
+        <span>CHECKPOINT</span>
+        <strong id="checkpoint">BASE CAMP</strong>
+      </div>
+      <div class="stat">
+        <span>FALLS</span>
+        <strong id="falls">0</strong>
+      </div>
+      <div class="stat">
+        <span>RESOLVE</span>
+        <strong id="resolve">0</strong>
+      </div>
+    </section>
 
-        <div class="hud">
-            <span id="checkpoint">Checkpoint: Base Camp</span>
-            <span id="falls">Falls: 0</span>
-            <span id="resolve">Resolve: 0</span>
+    <section class="game-frame">
+      <canvas id="gameCanvas" width="960" height="540">
+        Your browser does not support canvas.
+      </canvas>
+
+      <div class="overlay" id="startScreen">
+        <div class="overlay-card">
+          <p class="eyebrow">THE MOUNTAIN IS WAITING</p>
+          <h2>THE FALL<span>.</span></h2>
+          <p>Every fall is another reason to climb.</p>
+          <button id="startButton">START CLIMBING</button>
+          <small>WASD / ARROW KEYS TO MOVE · SPACE TO JUMP</small>
         </div>
+      </div>
 
-        <div class="canvas-container">
-            <canvas id="gameCanvas" width="960" height="540"></canvas>
-
-            <div id="startScreen" class="screen">
-                <h2>THE FALL</h2>
-                <p>You fell once. Now climb again.</p>
-                <button id="startButton">START CLIMBING</button>
-            </div>
-
-            <div id="winScreen" class="screen hidden">
-                <h2>YOU MADE IT!</h2>
-                <p>The fall didn't define you. Getting back up did.</p>
-                <button id="restartButton">PLAY AGAIN</button>
-            </div>
+      <div class="overlay hidden" id="winScreen">
+        <div class="overlay-card">
+          <p class="eyebrow">YOU MADE IT</p>
+          <h2>YOU ROSE AGAIN<span>.</span></h2>
+          <p>The summit wasn't easy. That's what made it worth it.</p>
+          <button id="restartButton">CLIMB AGAIN</button>
         </div>
+      </div>
+    </section>
 
-        <div class="controls">
-            <p><strong>MOVE:</strong> A / D or Arrow Keys</p>
-            <p><strong>JUMP:</strong> Space / W / Up Arrow</p>
-        </div>
-
-        <footer>
-            THE FALL — A game about resilience.
-        </footer>
-    </div>
+    <footer class="controls">
+      <span><kbd>A</kbd> <kbd>D</kbd> MOVE</span>
+      <span><kbd>SPACE</kbd> JUMP</span>
+      <span><kbd>R</kbd> RESTART</span>
+    </footer>
+    <p class="footer-note">THE FALL — EVERY CLIMB BEGINS WITH A CHOICE.</p>
+  </main>
+</body>
+</html>
 
     <script src="game.js"></script>
 </body>
