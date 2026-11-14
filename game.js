@@ -425,7 +425,6 @@ function gameLoop() {
 updateHUD();
 gameLoop();
 
-drawBackground();
 drawWorld();
 updateHUD();
 
